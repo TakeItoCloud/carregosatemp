@@ -1,0 +1,26 @@
+$OutDir = "C:\Scripts\MigExports"
+New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+
+$Users = "AnaPaulaSousa@bancocarregosa.com",
+         "DianaGomes@bancocarregosa.com",
+         "TiagoFleming@bancocarregosa.com"
+
+foreach ($u in $Users) {
+    $name = $u.Split("@")[0]                          # part before the @
+    Get-Mailbox $u | fl Alias, PrimarySmtpAddress, Database, ArchiveDatabase,
+        ArchiveState, ExchangeGuid, CustomAttribute5, LitigationHoldEnabled, RetentionPolicy |
+        Out-File -FilePath "$OutDir\$name.txt" -Encoding UTF8
+    Write-Host "Exported $u -> $OutDir\$name.txt"
+}
+
+
+################
+
+Set-Mailbox AnaPaulaSousa@bancocarregosa.com -CustomAttribute5 "<TAG>"
+Set-Mailbox DianaGomes@bancocarregosa.com    -CustomAttribute5 "<TAG>"
+Set-Mailbox TiagoFleming@bancocarregosa.com  -CustomAttribute5 "<TAG>"
+
+"AnaPaulaSousa@bancocarregosa.com",
+"DianaGomes@bancocarregosa.com",
+"TiagoFleming@bancocarregosa.com" |
+    ForEach-Object { Get-Mailbox $_ | fl PrimarySmtpAddress, CustomAttribute5 }

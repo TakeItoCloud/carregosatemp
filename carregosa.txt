@@ -1,0 +1,34 @@
+Import-Module ADSync
+
+# Get the exact name of the pre-provisioning rule (the one that nulls msExchMailboxGuid)
+$rule = Get-ADSyncRule | Where-Object {
+    $_.AttributeFlowMappings.Destination -contains 'msExchMailboxGuid'
+}
+
+# Guard: there must be exactly one
+if (@($rule).Count -ne 1) {
+    Write-Warning "Expected 1 rule, found $(@($rule).Count). Investigate before migrating."
+    $rule | Select-Object Name, Precedence, Connector, Disabled | Format-List
+}
+else {
+    Write-Host "Pre-provisioning rule: $($rule.Name)   Disabled: $($rule.Disabled)" -ForegroundColor Cyan
+
+    # Print ONLY this rule's scoping conditions - attribute + expected value
+    foreach ($grp in $rule.ScopeFilter) {
+        foreach ($c in $grp.ScopeConditions) {
+            [PSCustomObject]@{
+                Attribute = $c.Attribute
+                Operator  = $c.ComparisonOperator
+                Value     = $c.ComparisonValue
+            }
+        }
+    }
+}
+
+
+#########################################################
+
+
+Get-ADSyncConnector | Select-Object Name, Identifier, Type
+
+
