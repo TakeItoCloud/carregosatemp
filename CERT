@@ -10,3 +10,12 @@ foreach ($ip in '<IP of SAZCMXA>', '<IP of SAZCMXB>') {
     $ssl.Dispose(); $tcp.Close()
   } catch { "$ip : FAILED - $($_.Exception.Message)" }
 }
+
+
+Get-WebServicesVirtualDirectory -ADPropertiesOnly | Format-List Server, MRSProxyEnabled, WSSecurityAuthentication, WindowsAuthentication, BasicAuthentication
+Get-ExchangeServer | Format-Table Name, ServerRole, AdminDisplayVersion -AutoSize
+
+Import-Module WebAdministration
+Get-WebConfigurationProperty -PSPath 'IIS:\' -Location 'Default Web Site/EWS' -Filter 'system.webServer/security/authentication/windowsAuthentication/extendedProtection' -Name tokenChecking
+
+Get-ADUser <account> -Properties Enabled, LockedOut, PasswordExpired, PasswordLastSet | Format-List Name, Enabled, LockedOut, PasswordExpired, PasswordLastSet
