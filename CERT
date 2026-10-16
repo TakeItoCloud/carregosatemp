@@ -1,0 +1,12 @@
+$name = 'hybrid1.bancocarregosa.com'          # the name Exchange Online asks for
+foreach ($ip in '<IP of SAZCMXA>', '<IP of SAZCMXB>') {
+  try {
+    $tcp = New-Object Net.Sockets.TcpClient($ip, 443)
+    # Accepts any certificate only so we can READ it - nothing is trusted or changed.
+    $ssl = New-Object Net.Security.SslStream($tcp.GetStream(), $false, ({ $true } -as [Net.Security.RemoteCertificateValidationCallback]))
+    $ssl.AuthenticateAsClient($name, $null, [Security.Authentication.SslProtocols]::Tls12, $false)
+    $c = New-Object Security.Cryptography.X509Certificates.X509Certificate2($ssl.RemoteCertificate)
+    [pscustomobject]@{ Server = $ip; Subject = $c.Subject; Issuer = $c.Issuer; Thumbprint = $c.Thumbprint; NotAfter = $c.NotAfter } | Format-List
+    $ssl.Dispose(); $tcp.Close()
+  } catch { "$ip : FAILED - $($_.Exception.Message)" }
+}
