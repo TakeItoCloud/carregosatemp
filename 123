@@ -1,1 +1,2 @@
 Get-Content (Get-ChildItem 'C:\Scripts\MigHibrid\Evidence\Collection\Logs\*.log' | Sort-Object LastWriteTime | Select-Object -Last 1).FullName -Tail 20 -Wait
+Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-LAPS/Operational'; Id = 10020 } -ErrorAction SilentlyContinue | Sort-Object TimeCreated | Select-Object -First 3 TimeCreated, Id
