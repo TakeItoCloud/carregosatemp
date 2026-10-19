@@ -1,2 +1,14 @@
 Get-Content (Get-ChildItem 'C:\Scripts\MigHibrid\Evidence\Collection\Logs\*.log' | Sort-Object LastWriteTime | Select-Object -Last 1).FullName -Tail 20 -Wait
 Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-LAPS/Operational'; Id = 10020 } -ErrorAction SilentlyContinue | Sort-Object TimeCreated | Select-Object -First 3 TimeCreated, Id
+$rows = foreach ($f in Get-ChildItem 'C:\inetpub\logs\LogFiles\W3SVC1\u_ex*.log') {
+    $hdr = $null
+    foreach ($l in [IO.File]::ReadLines($f.FullName)) {
+        if ($l.StartsWith('#Fields:')) { $hdr = $l.Substring(9).Split(' '); continue }
+        if ($l.StartsWith('#') -or $l.IndexOf('mrsproxy', [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        $v = $l.Split(' ')
+        $u = $v[[array]::IndexOf($hdr, 'cs-username')]; $s = $v[[array]::IndexOf($hdr, 'sc-status')]; $w = $v[[array]::IndexOf($hdr, 'sc-win32-status')]
+        $real401 = ($s -eq '401' -and $w -ne '0' -and $w -ne '2148074254')
+        [pscustomobject]@{ Day = $v[0]; Result = $(if ($s -eq '200') { 'OK-200' } elseif ($real401) { 'REJECTED-401' } else { 'other' }); User = $u }
+    }
+}
+$rows | Where-Object Result -ne 'other' | Group-Object Day, Result, User | Sort-Object Name | Format-Table Count, Name -AutoSize
