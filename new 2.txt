@@ -6,12 +6,18 @@ Do this on each server.
 Get-HybridMoveOnPremEvidence.ps1
 the ExoIpRanges-<timestamp>.csv file from step 1
 2.2 Open the Exchange Management Shell as Administrator (right-click → Run as administrator). If the script was blocked after copying, unblock it:
-
+Unblock-File 'C:\Scripts\*.ps1'
 2.3 Run it. The window covers the failures of 16 Oct, 14:29–15:14 local. Widen it if step 1 showed later failures.
-
+& 'C:\Scripts\Get-HybridMoveOnPremEvidence.ps1' -HybridHostName 'hybrid1.bancocarregosa.com' -EndpointAccount 'LJC\administrator' `
+    -StartTime '2026-10-16 14:00' -EndTime '2026-10-16 16:00' -PublicIp '88.157.207.218' `
+    -ExoIpListPath 'C:\Scripts\ExoIpRanges-<timestamp>.csv' -TestCredential -EvidencePath 'C:\Scripts\Evidence'
+	
+	
 When the credential window appears, enter the LJC\administrator password. It’s used for the sign-in test only and isn’t logged.
 
 2.4 Zip the result:
+Compress-Archive -Path 'C:\Scripts\Evidence\Exchange\*' -DestinationPath "C:\Scripts\Exchange-$env:COMPUTERNAME.zip" -Force
+
 
 2.5 Copy C:\Scripts\Exchange-<SERVER>.zip to your laptop, into Z:\Work\Client\Carregosa\MigHibrid\Evidence\Exchange\.
 
@@ -19,12 +25,15 @@ Then repeat 2.1–2.5 on the other server.
 
 Step 3: Domain controller view (on the PDC emulator)
 3.1 Find the PDC emulator from any DC:
-
+netdom query fsmo
 Use the server on the PDC line.
 
 3.2 Copy Get-HybridMoveAuthEvidence.ps1 to C:\Scripts\ on that DC. If it was blocked, unblock it:
-
+Unblock-File 'C:\Scripts\*.ps1'
 3.3 Run it in Windows PowerShell as Administrator:
+& 'C:\Scripts\Get-HybridMoveAuthEvidence.ps1' -AccountName 'LJC\administrator' `
+    -StartTime '2026-10-16 14:00' -EndTime '2026-10-16 16:00' -AllDomainControllers -EvidencePath 'C:\Scripts\Evidence'4 Zip the result, then copy C:\Scripts\DC.zip to Z:\Work\Client\Carregosa\MigHibrid\Evidence\DC\ on your laptop:
 
-3.4 Zip the result, then copy C:\Scripts\DC.zip to Z:\Work\Client\Carregosa\MigHibrid\Evidence\DC\ on your laptop:
 
+Compress-Archive -Path 'C:\Scripts\Evidence\DC\*' -DestinationPath 'C:\Scripts\DC.zip' -Force
+Step 4: Verdict (your laptop, Windows PowerShell)
