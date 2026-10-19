@@ -1,0 +1,30 @@
+Step 2: On-premises view (on SAZCMXA, then on SAZCMXB)
+Do this on each server.
+
+2.1 Copy to C:\Scripts\ on the server, using RDP drive redirection or a share:
+
+Get-HybridMoveOnPremEvidence.ps1
+the ExoIpRanges-<timestamp>.csv file from step 1
+2.2 Open the Exchange Management Shell as Administrator (right-click → Run as administrator). If the script was blocked after copying, unblock it:
+
+2.3 Run it. The window covers the failures of 16 Oct, 14:29–15:14 local. Widen it if step 1 showed later failures.
+
+When the credential window appears, enter the LJC\administrator password. It’s used for the sign-in test only and isn’t logged.
+
+2.4 Zip the result:
+
+2.5 Copy C:\Scripts\Exchange-<SERVER>.zip to your laptop, into Z:\Work\Client\Carregosa\MigHibrid\Evidence\Exchange\.
+
+Then repeat 2.1–2.5 on the other server.
+
+Step 3: Domain controller view (on the PDC emulator)
+3.1 Find the PDC emulator from any DC:
+
+Use the server on the PDC line.
+
+3.2 Copy Get-HybridMoveAuthEvidence.ps1 to C:\Scripts\ on that DC. If it was blocked, unblock it:
+
+3.3 Run it in Windows PowerShell as Administrator:
+
+3.4 Zip the result, then copy C:\Scripts\DC.zip to Z:\Work\Client\Carregosa\MigHibrid\Evidence\DC\ on your laptop:
+
