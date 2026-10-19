@@ -1,0 +1,86 @@
+############################################################################################################
+#  Hybrid move evidence - commands to paste on the servers (Windows PowerShell 5.1)
+#  Window to collect: migration batch created 2026-10-19 16:07 local; sign-in failures 16:08 - 16:40 local
+#  (15:08 - 15:40 UTC). The commands use 15:52 - 17:00 local.
+#
+#  ORDER:  1) DC100A   2) SAZCMXA   3) SAZCMXB      (DC first: busy DCs overwrite the Security log quickly)
+#
+#  Contains no passwords. It does contain server, host and account names: keep the repository PRIVATE.
+#  Lines starting with # are comments; paste one block at a time.
+############################################################################################################
+
+
+############################################################################################################
+#  SECTION 4 - INSTALL THE SCRIPTS (same on DC100A, SAZCMXA and SAZCMXB)
+#  Window: DC100A = Windows PowerShell "Run as administrator"
+#          SAZCMXA / SAZCMXB = Exchange Management Shell "Run as administrator"
+############################################################################################################
+
+# 4.1  Download MigHibrid-scripts.zip from the private repository to C:\Scripts\ (browser, or copy over RDP).
+
+# 4.2  Extract to C:\Scripts\MigHibrid, unblock the files, allow scripts in THIS window only
+New-Item -ItemType Directory -Path 'C:\Scripts\MigHibrid' -Force | Out-Null
+Expand-Archive -Path 'C:\Scripts\MigHibrid-scripts.zip' -DestinationPath 'C:\Scripts\MigHibrid' -Force
+Get-ChildItem 'C:\Scripts\MigHibrid' -File | Unblock-File
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+# 4.3  Check: the 5 scripts and ExoIpRanges.csv must be listed
+Get-ChildItem 'C:\Scripts\MigHibrid' -File | Select-Object Name, Length
+
+
+############################################################################################################
+#  SECTION 5.1 - DC100A  (Windows PowerShell "Run as administrator")  - RUN THIS FIRST
+############################################################################################################
+
+# 5.1.a  Does the Security log still reach back to the failure window? (oldest event must be before 16:08)
+(Get-WinEvent -LogName Security -MaxEvents 1 -Oldest).TimeCreated
+
+# 5.1.b  Collect (reads account state, lockout policy, 4776 / 4740 / 4625 on all DCs)
+& 'C:\Scripts\MigHibrid\Get-HybridMoveAuthEvidence.ps1' -AccountName 'LJC\administrator' `
+    -StartTime '2026-10-19 15:52' -EndTime '2026-10-19 17:00' `
+    -AllDomainControllers -EvidencePath 'C:\Scripts\MigHibrid\Evidence'
+
+# 5.1.c  Zip the result  -> copy C:\Scripts\DC-DC100A.zip to the laptop: C:\Scripts\MigHibrid\Evidence\DC\
+Compress-Archive -Path 'C:\Scripts\MigHibrid\Evidence\DC\*' -DestinationPath 'C:\Scripts\DC-DC100A.zip' -Force
+
+
+############################################################################################################
+#  SECTION 5.2 - SAZCMXA  (Exchange Management Shell "Run as administrator")
+#  At the credential prompt type LJC\administrator and its CURRENT password (sign-in test, not logged).
+############################################################################################################
+
+# 5.2.a  Collect
+& 'C:\Scripts\MigHibrid\Get-HybridMoveOnPremEvidence.ps1' -HybridHostName 'hybrid1.bancocarregosa.com' `
+    -EndpointAccount 'LJC\administrator' -StartTime '2026-10-19 15:52' -EndTime '2026-10-19 17:00' `
+    -PublicIp '88.157.207.218' -ExoIpListPath 'C:\Scripts\MigHibrid\ExoIpRanges.csv' `
+    -TestCredential -EvidencePath 'C:\Scripts\MigHibrid\Evidence'
+
+# 5.2.b  Zip the result  -> copy C:\Scripts\Exchange-SAZCMXA.zip to the laptop: C:\Scripts\MigHibrid\Evidence\Exchange\
+Compress-Archive -Path 'C:\Scripts\MigHibrid\Evidence\Exchange\*' -DestinationPath "C:\Scripts\Exchange-$env:COMPUTERNAME.zip" -Force
+
+
+############################################################################################################
+#  SECTION 5.3 - SAZCMXB  (Exchange Management Shell "Run as administrator")
+#  Same as SAZCMXA. At the credential prompt type LJC\administrator and its CURRENT password.
+############################################################################################################
+
+# 5.3.a  Collect
+& 'C:\Scripts\MigHibrid\Get-HybridMoveOnPremEvidence.ps1' -HybridHostName 'hybrid1.bancocarregosa.com' `
+    -EndpointAccount 'LJC\administrator' -StartTime '2026-10-19 15:52' -EndTime '2026-10-19 17:00' `
+    -PublicIp '88.157.207.218' -ExoIpListPath 'C:\Scripts\MigHibrid\ExoIpRanges.csv' `
+    -TestCredential -EvidencePath 'C:\Scripts\MigHibrid\Evidence'
+
+# 5.3.b  Zip the result  -> copy C:\Scripts\Exchange-SAZCMXB.zip to the laptop: C:\Scripts\MigHibrid\Evidence\Exchange\
+Compress-Archive -Path 'C:\Scripts\MigHibrid\Evidence\Exchange\*' -DestinationPath "C:\Scripts\Exchange-$env:COMPUTERNAME.zip" -Force
+
+
+############################################################################################################
+#  AFTERWARDS ON THE LAPTOP (Windows PowerShell) - not on the servers
+############################################################################################################
+
+# Cloud view (enter the LJC\administrator password at the prompt)
+#   & 'C:\Scripts\MigHibrid\Get-HybridMoveCloudEvidence.ps1' -EmailAddress 'MariaCandida@bancocarregosa.com' -BatchName 'Onboard-MariaCandida' -TestTypedCredential -EvidencePath 'C:\Scripts\MigHibrid\Evidence'
+# Verdict (after the 3 zips are in Evidence\DC and Evidence\Exchange)
+#   & 'C:\Scripts\MigHibrid\Get-HybridMoveVerdict.ps1' -EvidencePath 'C:\Scripts\MigHibrid\Evidence'
+# Evidence zip for analysis (keep OFF GitHub - it contains client logs)
+#   Compress-Archive -Path 'C:\Scripts\MigHibrid\Evidence\*' -DestinationPath 'C:\Scripts\MigHibrid-Evidence.zip' -Force
