@@ -12,3 +12,10 @@ $rows = foreach ($f in Get-ChildItem 'C:\inetpub\logs\LogFiles\W3SVC1\u_ex*.log'
     }
 }
 $rows | Where-Object Result -ne 'other' | Group-Object Day, Result, User | Sort-Object Name | Format-Table Count, Name -AutoSize
+
+
+
+
+Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-NTLM/Operational'; Id = 4022; StartTime = (Get-Date).AddMinutes(-20) } |
+    Where-Object { $_.Message -match 'testmighibrid' } |
+    ForEach-Object { if ($_.Message -match 'Domain Name:\s*(\S+)') { $Matches[1] } else { '?' } } | Group-Object | Select-Object Count, Name
