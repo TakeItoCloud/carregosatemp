@@ -14,7 +14,7 @@ $rows = foreach ($f in Get-ChildItem 'C:\inetpub\logs\LogFiles\W3SVC1\u_ex*.log'
 $rows | Where-Object Result -ne 'other' | Group-Object Day, Result, User | Sort-Object Name | Format-Table Count, Name -AutoSize
 
 Get-ADGroupMember -Identity 'Protected Users' -Recursive | Where-Object SamAccountName -eq 'testmighibrid'
-
+Get-RoleGroupMember -Identity 'Recipient Management' | Select-Object Name, SamAccountName
 
 $dn = ([adsisearcher]'(sAMAccountName=testmighibrid)').FindOne().Properties['distinguishedname'][0]
 $u  = [ADSI]"LDAP://$dn"; $u.RefreshCache('tokenGroups')
