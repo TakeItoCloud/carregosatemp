@@ -27,3 +27,18 @@ $u.tokenGroups | ForEach-Object { (New-Object Security.Principal.SecurityIdentif
 Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-NTLM/Operational'; Id = 4022; StartTime = (Get-Date).AddMinutes(-20) } |
     Where-Object { $_.Message -match 'testmighibrid' } |
     ForEach-Object { if ($_.Message -match 'Domain Name:\s*(\S+)') { $Matches[1] } else { '?' } } | Group-Object | Select-Object Count, Name
+
+
+
+
+
+
+
+Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-NTLM/Operational'; Id = 4022; StartTime = (Get-Date).AddMinutes(-20) } |
+    Where-Object { $_.Message -match 'testmighibrid' } |
+    ForEach-Object { if ($_.Message -match 'Domain Name:\s*(\S+)') { $Matches[1] } else { '?' } } | Group-Object | Select-Object Count, Name
+
+
+
+Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4625; StartTime = (Get-Date).AddMinutes(-20) } -ErrorAction SilentlyContinue |
+    Where-Object { $_.Properties[5].Value -eq 'testmighibrid' } | Measure-Object | Select-Object Count
