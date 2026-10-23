@@ -1,0 +1,110 @@
+Here's the full procedure, exactly as we ran it for Ana/Diana/Tiago, with the 12 users baked in — plus **one new pre-flight step** I'm adding because of what bit us last time (Tiago's 1,842-folder endpoint timeout and Diana's 124k-item folder). I'm giving you the whole runbook since you asked for all steps; say the word if you'd rather I walk you through it phase by phase.
+
+Three things to confirm against your environment as you go (I've put a check command for each rather than assume): the **license SKU** you used for the first 3, that **auto-expanding archive is already enabled org-wide**, and the **`.mail.onmicrosoft.com` routing domain**.
+
+**Setup — run once in the on-prem Exchange Management Shell:**
+```powershell
+$Users = @(
+ 'anacarvalho@ljc.local','BrunoPerez@ljc.local','DiogoMarcal@ljc.local',
+ 'FernandoBorges@ljc.local','FernandoNunes@ljc.local','FranciscaLaranja@ljc.local',
+ 'JesseAkers@bancocarregosa.com','JoanaMartins@ljc.local','MicaelaMadureira@ljc.local',
+ 'RaquelCardoso@ljc.local','SilviaCruz@ljc.local','TeresaRocha@ljc.local'
+)
+$OutDir = 'C:\Scripts\Cannes\BCMigration\Batch2'
+New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+```
+
+**Phase A — Baseline capture (on-prem EMS)** — same as before, one file per alias:
+```powershell
+foreach ($u in $Users) {
+  $a = ($u -split '@')[0]
+  Get-Mailbox $u | Select-Object * | Export-Clixml "$OutDir\$a-mailbox.xml"
+}
+$Users | ForEach-Object {
+  $m = Get-Mailbox $_
+  [pscustomobject]@{
+    User          = $m.PrimarySmtpAddress
+    PrimarySize   = (Get-MailboxStatistics $_).TotalItemSize
+    ArchiveSize   = if ($m.ArchiveGuid -ne [guid]::Empty) {(Get-MailboxStatistics $_ -Archive).TotalItemSize} else {'none'}
+    CustomAttr5   = $m.CustomAttribute5
+  }
+} | Export-Csv "$OutDir\baseline-sizes.csv" -NoTypeInformation
+```
+
+**Phase A.2 — NEW pre-flight: catch the Tiago/Diana problems before starting (on-prem EMS):**
+```powershell
+$Users | ForEach-Object {
+  $fs  = Get-MailboxFolderStatistics $_
+  $fsA = Get-MailboxFolderStatistics $_ -Archive -ErrorAction SilentlyContinue
+  $big = ($fs + $fsA | Sort-Object ItemsInFolder -Descending | Select-Object -First 1)
+  [pscustomobject]@{
+    User=$_; PrimaryFolders=$fs.Count; ArchiveFolders=($fsA|Measure-Object).Count
+    BiggestFolderItems=$big.ItemsInFolder; BiggestFolderPath=$big.FolderPath
+  }
+} | Tee-Object -Variable pf | Format-Table -Auto
+$pf | Export-Csv "$OutDir\preflight-folders.csv" -NoTypeInformation
+```
+**Act on this before you migrate:** any mailbox with **>1,000 folders** (Tiago's failure) or a **single folder >~100k items** (Diana's) gets `ExtendedEwsTimeout=1` on its MigrationWiz item up front, and for the oversized folder, agree a split with the client — don't start it blind like we did.
+
+**Phase B — Tag for pre-provisioning (on-prem EMS):**
+```powershell
+foreach ($u in $Users) { Set-Mailbox $u -CustomAttribute5 "BT - User Migrated" }
+$Users | ForEach-Object { Get-Mailbox $_ | Format-List Name,CustomAttribute5 }   # verify
+```
+
+**Phase C — Sync & verify the GUID is nulled (on the Entra Connect server):**
+```powershell
+Start-ADSyncSyncCycle -PolicyType Delta
+```
+That fires the "MIGWIZ – In from AD – User Exchange" rule, which nulls `msExchMailboxGuid` for the tagged users so Exchange Online provisions a fresh target mailbox. Give it a few minutes, then confirm in AD that `msExchMailboxGuid` is cleared for these users.
+
+**Phase D — Apply the license (this is what creates the cloud target):**
+Assign the **same license SKU you used for the first 3** to all 12 (M365 admin center → each user → Licenses, or Graph). Confirm which SKU:
+```powershell
+# in Graph/MSOL, check what Ana/Diana/Tiago have, match it:
+Get-MgUserLicenseDetail -UserId AnaPaulaSousa@bancocarregosa.com | fl SkuPartNumber
+```
+Enable the online archive if the license doesn't auto-enable it.
+
+**Phase E — Verify cloud mailbox + archive + auto-expand (Exchange Online):**
+```powershell
+Connect-ExchangeOnline
+$Cloud = $Users | ForEach-Object { ($_ -split '@')[0] + '@bancocarregosa.com' }   # JesseAkers already correct
+$Cloud | ForEach-Object {
+  Get-EXOMailbox $_ -Properties ExchangeGuid,ArchiveGuid,ArchiveStatus,AutoExpandingArchiveEnabled `
+    -ErrorAction SilentlyContinue |
+  fl DisplayName,RecipientTypeDetails,ExchangeGuid,ArchiveGuid,ArchiveStatus,AutoExpandingArchiveEnabled
+}
+Get-OrganizationConfig | fl AutoExpandingArchive    # must be True for hybrid cloud archives
+# if False (one-time, cannot be undone):  Set-OrganizationConfig -AutoExpandingArchive $true
+```
+Each user should show `RecipientTypeDetails: UserMailbox` with an `ExchangeGuid` (and `ArchiveGuid` if archived). If a mailbox hasn't appeared, the license/sync hasn't completed — wait and re-check.
+
+**Phase F — Add to MigrationWiz (GUI):**
+- **Primary Mailbox Mig** project → **Add → Bulk Add**: source = on-prem primary SMTP, destination = `@bancocarregosa.com` SMTP, for all 12.
+- **Archive** project → **Bulk Add**: only the users that have an archive (from Phase A).
+- Select all → **Apply Licenses** (UMB).
+- Endpoints are already configured — reused, nothing to change.
+- Leave **Mailbox Status = Active**. The Archive project already has **Log subjects of failed items** on and **Max errors** high from last time.
+
+**Phase G — Run the passes:**
+- Select the new users → **Start → Pre-Stage Migration** (email only) now.
+- Keep concurrency sane and **don't run a mailbox flagged in Phase A.2 at full tilt** until its timeout/folder mitigation is in place.
+- The **Full** pass is the cutover-day delta (calendar/contacts/rules + recent mail).
+
+**Phase H — Cutover (later, per user — the delicate part):**
+Capture the GUIDs **before** disabling (Disable-Mailbox wipes the CustomAttributes), then:
+```powershell
+# 1) capture from EXO (Phase E output) the ExchangeGuid + ArchiveGuid per user
+# 2) run the final Full/delta pass in MigrationWiz
+# 3) on-prem, per user:
+Disable-Mailbox <user>
+Enable-RemoteMailbox  <user> -RemoteRoutingAddress <alias>@bancocarregosa.mail.onmicrosoft.com
+Set-RemoteMailbox     <user> -ExchangeGuid <cloudExchangeGuid> -ArchiveGuid <cloudArchiveGuid>
+# scoping tag already cleared by Disable-Mailbox; confirm CustomAttribute5 is empty
+```
+Confirm your exact routing domain (`Get-AcceptedDomain | ? Name -like '*mail.onmicrosoft.com*'`) before stamping.
+
+Two notes before you start: **JesseAkers** is already an `@bancocarregosa.com` identity — confirm it still has an on-prem mailbox in ljc.local and isn't already a remote/cloud object before tagging it. And run **Phase A.2 first and read it** — that's the single change that would have saved us the Tiago and Diana firefights.
+
+Want me to package this as a Securnet Word runbook, or wrap Phases A–B + the pre-flight into one read-only `.ps1` (your C:\Scripts\Cannes house style, `-WhatIf` on the tagging) so Batch 2 is one click?
