@@ -1,3 +1,11 @@
+
+cd "%ProgramFiles%\Microsoft Azure AD Sync\bin"
+csexport "bancocarregosa.onmicrosoft.com - Microsoft Entra ID" %temp%\export.xml /f:x
+CSExportAnalyzer %temp%\export.xml > %temp%\export.csv
+
+
+
+
 Here's the full procedure, exactly as we ran it for Ana/Diana/Tiago, with the 12 users baked in — plus **one new pre-flight step** I'm adding because of what bit us last time (Tiago's 1,842-folder endpoint timeout and Diana's 124k-item folder). I'm giving you the whole runbook since you asked for all steps; say the word if you'd rather I walk you through it phase by phase.
 
 Three things to confirm against your environment as you go (I've put a check command for each rather than assume): the **license SKU** you used for the first 3, that **auto-expanding archive is already enabled org-wide**, and the **`.mail.onmicrosoft.com` routing domain**.
